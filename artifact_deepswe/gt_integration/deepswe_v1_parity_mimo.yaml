@@ -60,8 +60,7 @@
 # JSON body keys (openrouter_model.py:73), NO litellm, NO extra_body concept. So the
 # pin must be `provider` directly. Shape live-verified 3/3 provider=Xiaomi via curl.
 # ═══════════════════════════════════════════════════════════════════════════
-model:
-  model_kwargs:
-    provider:
-      order: ["Xiaomi"]
-      allow_fallbacks: false
+# MODEL-AGNOSTIC (2026-08-21): the former Xiaomi provider pin was removed so this
+# overlay stays a pure no-op for ANY model routed via --model. Provider selection
+# belongs to the workflow's model route, not this file. Empty mapping = guaranteed
+# no-op overlay (yaml.safe_load(THIS_FILE) or {}).

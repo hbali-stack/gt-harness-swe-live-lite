@@ -21,7 +21,7 @@ on:
       model:
         description: "LLM model"
         required: true
-        default: "deepseek/deepseek-v4-flash"
+        default: "openrouter/stealth/ox-alpha"
       language:
         description: "Language filter (all, python, go, typescript, javascript, rust)"
         required: true
