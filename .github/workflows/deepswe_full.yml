@@ -22,10 +22,6 @@ on:
         description: "LLM model"
         required: true
         default: "openrouter/stealth/ox-alpha"
-      openrouter_api_key:
-        description: "OpenRouter API key, supplied from outside at dispatch time (overrides the repo secret). CAUTION: on a PUBLIC repo this value is visible in the run's job logs + metadata to anyone."
-        required: false
-        default: ""
       language:
         description: "Language filter (all, python, go, typescript, javascript, rust)"
         required: true
@@ -50,8 +46,8 @@ on:
         description: "CPUs for the eval container (--override-cpus). 2 = demand-shrink to fit 16GB on heavy builds (non-degrading, only slows verification). 4 = full (baseline, for the no-degradation A/B). Overrides GT_EVAL_CONTAINER_CPUS."
         required: false
         default: "2"
-      eval_livecap_mb:
-        description: "If set (e.g. 8000), live `docker update --memory=<MB>m --memory-swap=-1` the eval container the instant it starts — last-lever OOM test for the heavy giants. Empty = off."
+      openrouter_api_key:
+        description: "OpenRouter API key, supplied from outside at dispatch time (overrides the repo secret). CAUTION: on a PUBLIC repo this value is visible in the run's job logs + metadata to anyone."
         required: false
         default: ""
       assets_repo:
