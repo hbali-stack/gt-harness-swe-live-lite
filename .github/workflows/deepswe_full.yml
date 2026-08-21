@@ -22,6 +22,10 @@ on:
         description: "LLM model"
         required: true
         default: "openrouter/stealth/ox-alpha"
+      openrouter_api_key:
+        description: "OpenRouter API key, supplied from outside at dispatch time (overrides the repo secret). CAUTION: on a PUBLIC repo this value is visible in the run's job logs + metadata to anyone."
+        required: false
+        default: ""
       language:
         description: "Language filter (all, python, go, typescript, javascript, rust)"
         required: true
@@ -697,11 +701,12 @@ jobs:
 
       - name: Preflight checks (fail-fast on infra, warn on quality)
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key || secrets.OPENROUTER_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         shell: bash
         run: |
           set -e
+          echo "::add-mask::${OPENROUTER_API_KEY}"
           echo "=== INFRA PREFLIGHT (fail-fast) ==="
           INPUT_MODEL="${{ inputs.model }}"
           if echo "$INPUT_MODEL" | grep -qiE "openrouter/|xiaomi/mimo"; then
@@ -1256,8 +1261,9 @@ jobs:
             PIER_MODEL_CLASS_ARGS=(--ak model_class=litellm)
             echo "=== Model routed via TokenRouter: $INPUT_MODEL (model_class=litellm / chat-completions) ==="
           elif echo "$INPUT_MODEL" | grep -qiE "openrouter/|xiaomi/mimo"; then
-            export OPENROUTER_API_KEY="${{ secrets.OPENROUTER_API_KEY }}"
-            GT_AE_ARGS+=(--ae "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}")
+            export OPENROUTER_API_KEY="${{ inputs.openrouter_api_key || secrets.OPENROUTER_API_KEY }}"
+            echo "::add-mask::${OPENROUTER_API_KEY}"
+            GT_AE_ARGS+=(--ae "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}")
             echo "=== Model routed via OpenRouter: $INPUT_MODEL ==="
           elif echo "$INPUT_MODEL" | grep -qiE "deepseek"; then
             export DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}"
