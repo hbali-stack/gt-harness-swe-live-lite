@@ -3,6 +3,10 @@ name: "SWE-bench-Live 30-task (VM baseline)"
 on:
   workflow_dispatch:
     inputs:
+      api_key:
+        description: "Provider API key, supplied from outside at dispatch time (overrides the repo secret)."
+        required: false
+        default: ""
       gt_commit:
         description: 'GT commit/branch'
         required: true
@@ -41,7 +45,7 @@ permissions:
   packages: read
 
 env:
-  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
   # OH-surface embedder PIN (P0.2): this pipeline bakes ONLY e5-small-v2 (the
   # gt-runtime-models release asset -> gt-models artifact). The loader DEFAULT is
   # gte-modernbert-base and, under GT_REQUIRE_EMBEDDER=1, the gte-or-raise hardening
@@ -62,7 +66,7 @@ jobs:
       - uses: ./.github/actions/setup-eval
       - name: Preflight checks (fail-fast on infra, warn on quality)
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
         run: |
           set -e
           echo "=== INFRA PREFLIGHT (fail-fast) ==="
@@ -356,7 +360,7 @@ jobs:
 
           [llm.eval]
           model = "deepseek/deepseek-v4-flash"
-          api_key = "${{ secrets.DEEPSEEK_API_KEY }}"
+          api_key = "${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}"
           base_url = "https://api.deepseek.com"
           temperature = ${{ inputs.temperature }}
           top_p = ${{ inputs.top_p }}
@@ -732,7 +736,7 @@ jobs:
           for ATTEMPT in 1 2 3; do
             HTTP_CODE=$(curl -s -o /tmp/preflight/deepseek_probe.json -w "%{http_code}" \
               -X POST "https://api.deepseek.com/chat/completions" \
-              -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
+              -H "Authorization: Bearer ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}" \
               -H "Content-Type: application/json" \
               -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"say ok"}],"max_tokens":5}')
             if [ "$HTTP_CODE" = "200" ]; then
@@ -762,7 +766,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/src:${{ github.workspace }}/scripts/swebench:/tmp/OpenHands"
           GT_INDEX_BINARY: "/tmp/gt-index"
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
           NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
           # Live log stream to a user-run ngrok tunnel: log_relay POSTs each line to this URL
           # (the tunnel forwards to the user's local scripts/log_sink.py). Ephemeral per ngrok

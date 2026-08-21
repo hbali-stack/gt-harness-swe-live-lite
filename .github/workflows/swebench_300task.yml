@@ -3,6 +3,10 @@ name: "SWE-bench-Live Lite 300-task (GT full pipeline)"
 on:
   workflow_dispatch:
     inputs:
+      api_key:
+        description: "Provider API key, supplied from outside at dispatch time (overrides the repo secret)."
+        required: false
+        default: ""
       gt_commit:
         description: 'GT commit/branch'
         required: true
@@ -53,7 +57,7 @@ permissions:
   packages: read
 
 env:
-  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
   # Full-stack enforcement (commits 51de7275/bf8fd2b9) — no silent fallback on a
   # 300-task paid run. Aborts LOUD if FTS5 / ONNX embeddings / LSP aren't
   # behaviorally live (LSP gated by a real launch + resolve probe, not just presence).
@@ -364,7 +368,7 @@ jobs:
       # session is closed BEFORE the paid matrix. A failure here costs $0 (no agent runs).
       - name: Strict preflight — fail-closed before the paid matrix
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
         run: |
           set -e
           echo "=== STRICT PREFLIGHT (Stage-0) ==="
@@ -645,7 +649,7 @@ jobs:
 
           [llm.eval]
           model = "deepseek/deepseek-v4-flash"
-          api_key = "${{ secrets.DEEPSEEK_API_KEY }}"
+          api_key = "${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}"
           base_url = "https://api.deepseek.com"
           temperature = ${{ inputs.temperature }}
           top_p = ${{ inputs.top_p }}
@@ -1347,7 +1351,7 @@ jobs:
           for ATTEMPT in 1 2 3; do
             HTTP_CODE=$(curl -s -o /tmp/preflight/deepseek_probe.json -w "%{http_code}" \
               -X POST "https://api.deepseek.com/chat/completions" \
-              -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
+              -H "Authorization: Bearer ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}" \
               -H "Content-Type: application/json" \
               -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"say ok"}],"max_tokens":5}')
             if [ "$HTTP_CODE" = "200" ]; then
@@ -1377,7 +1381,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/src:${{ github.workspace }}/scripts/swebench:/tmp/OpenHands"
           GT_INDEX_BINARY: "/tmp/gt-index"
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
           GT_LOG_RELAY_URL: ${{ vars.GT_LOG_RELAY_URL }}
           GT_DEBUG_DIR: "/tmp/gt_debug"
           GT_MAX_LLM_CALLS: "300"

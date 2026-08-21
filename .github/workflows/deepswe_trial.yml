@@ -6,6 +6,10 @@ name: "DeepSWE: Single GT trial"
 on:
   workflow_dispatch:
     inputs:
+      api_key:
+        description: "Provider API key, supplied from outside at dispatch time (overrides the repo secret)."
+        required: false
+        default: ""
       task_id:
         description: "DeepSWE task ID (e.g., dateutil-rfc5545-timezone-interop)"
         required: true
@@ -13,7 +17,7 @@ on:
       model:
         description: "LLM model"
         required: true
-        default: "deepseek/deepseek-v4-flash"
+        default: "openrouter/stealth/ox-alpha"
       enable_witness_flags:
         description: "WS-1/2/3 delivery levers on? (GT_DOSE_ROTATE+GT_SS_FLARE+GT_RECOVERY_LOOP) — 'on' for the GT-on arm, 'off' for the byte-identical baseline"
         required: false
@@ -47,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
 
     steps:
       - name: Checkout GroundTruth

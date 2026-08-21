@@ -10,6 +10,10 @@ name: "DeepSWE: Pre-index repos + smoke run"
 on:
   workflow_dispatch:
     inputs:
+      api_key:
+        description: "Provider API key, supplied from outside at dispatch time (overrides the repo secret)."
+        required: false
+        default: ""
       language:
         description: "Language filter (all, python, go, typescript, javascript, rust)"
         required: true
@@ -26,7 +30,7 @@ on:
       smoke_model:
         description: "Model for smoke test"
         required: true
-        default: "deepseek/deepseek-v4-flash"
+        default: "openrouter/stealth/ox-alpha"
 
 env:
   # FTS5 must be Go-built into every pre-indexed graph.db; abort the index if the
@@ -299,7 +303,7 @@ jobs:
 
       - name: Run pier smoke (3 tasks)
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
         run: |
           # Pick 3 tasks (1 Python, 1 Go, 1 TS) that have indexes
           PYTHON_TASK=$(ls indexes/ | head -1)  # Will be refined
