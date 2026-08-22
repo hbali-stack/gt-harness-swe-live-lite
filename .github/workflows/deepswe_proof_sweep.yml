@@ -36,6 +36,7 @@ on:
     paths: [".github/workflows/deepswe_proof_sweep.yml"]
 
 permissions:
+  actions: read
   contents: read
   packages: read
 
@@ -475,6 +476,16 @@ jobs:
           echo "OK: ${TASK_ID} — proof exit 0, row recorded"
 
   # ── summarize: aggregate the 113 rows into the audit report. ──
+  task_progress:
+    name: Task progress
+    needs: [prepare]
+    if: always()
+    uses: ./.github/workflows/task_progress.yml
+    with:
+      expected_total: ${{ needs.prepare.outputs.total }}
+      task_job_regex: '^.+ \(.+\)$'
+    secrets: inherit
+
   summarize:
     needs: [prepare, proof]
     if: always()
