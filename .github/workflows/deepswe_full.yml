@@ -120,6 +120,7 @@ on:
         default: "1"
 
 permissions:
+  actions: read
   contents: write   # live-log bridge force-pushes per-task logs to gha-live-logs/<task> branches
   packages: read
 
@@ -1586,6 +1587,16 @@ jobs:
           # unable to fail a clean job (a hang times out → continue-on-error swallows it).
           sudo swapoff /gt_swap 2>/dev/null || true; sudo rm -f /gt_swap 2>/dev/null || true
           rm -f /tmp/gt-substrate.tar.gz /tmp/docker.tgz /tmp/deepswe-bench.tar.gz 2>/dev/null || true
+
+  task_progress:
+    name: Task progress
+    needs: [prepare]
+    if: always()
+    uses: ./.github/workflows/task_progress.yml
+    with:
+      expected_total: ${{ needs.prepare.outputs.total }}
+      task_job_regex: '^.+ \(.+\)$'
+    secrets: inherit
 
   summarize:
     # prepare is in needs so its outputs (total, bench_sha) are guaranteed in the needs
