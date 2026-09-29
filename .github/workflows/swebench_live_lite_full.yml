@@ -89,6 +89,10 @@ on:
         description: "gt-harness ref providing gt_engine for thin=true"
         required: false
         default: "integ/gt-attached"
+      thin_review_mode:
+        description: "thin only: submit review 'always' (hold every first submit) or 'flagged' (hold only when a task literal/signature is missing)"
+        required: false
+        default: "always"
       gt_ref:
         description: "Git ref (branch/tag/SHA) to CHECK OUT for the GT code seam. The SYNCED seam — gt_mini_patch.py + src/groundtruth/{runtime,delivery,pretask} + gt_ae_block.sh — is staged from THIS ref at runtime (SPEED-OPT E), so pointing it at an RL-adherence commit evaluates that code WITHOUT a substrate rebake. NOTE: the step-0 brief is BAKED into the substrate (brief.txt), so brief-CONTENT changes still need a rebake; only the seam follows this ref. Default gt-trial (prior behaviour)."
         required: false
@@ -1157,6 +1161,7 @@ jobs:
           INPUT_BASELINE: ${{ inputs.baseline }}
           GT_BASELINE_FLAG: ${{ inputs.baseline == true && '1' || '0' }}
           GT_THIN_FLAG: ${{ inputs.thin == true && '1' || '0' }}
+          GT_REVIEW_MODE: ${{ inputs.thin_review_mode || 'always' }}
           DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
           OPENROUTER_API_KEY: ${{ inputs.api_key || secrets.OPENROUTER_API_KEY }}
           REPO_OWNER: ${{ github.repository_owner }}
@@ -1658,6 +1663,7 @@ jobs:
             -e GT_XSESSION_DIR="/opt/gt_xsession" \
             -e GT_BASELINE=$GT_BASELINE_FLAG \
             -e GT_THIN=$GT_THIN_FLAG \
+            -e GT_SUBMIT_REVIEW_MODE=$GT_REVIEW_MODE \
             $MODEL_ENV \
             --entrypoint "" \
             "$TASK_IMAGE_IMMUTABLE" \
