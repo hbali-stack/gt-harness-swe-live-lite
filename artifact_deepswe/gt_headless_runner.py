@@ -261,7 +261,10 @@ def run(env: dict | None = None) -> int:
         # Thin GT (gt_engine.thin_agent, GitNexus shape): THIS control arm - same config, model,
         # environment and DefaultAgent - plus GT observations appended to the agent's own actions.
         # GT_BASELINE stays 1, so nothing else of the GT-on arm (profile, gt_mini_patch) runs.
-        agent, thin_delivery = _thin_agent(model, env_obj, agent_cfg, task, model_name, e)
+        try:
+            agent, thin_delivery = _thin_agent(model, env_obj, agent_cfg, task, model_name, e)
+        except Exception as _exc:  # noqa: BLE001 -- GT must never cost the run: stay the control arm
+            _bc(f"WARN thin GT unavailable ({type(_exc).__name__}: {_exc}); running the stock agent")
     batch_required = _batch_hook_required(e)
     batch_result = "patch_import_unavailable"
     batch_attached = False

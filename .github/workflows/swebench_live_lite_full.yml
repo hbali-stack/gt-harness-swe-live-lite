@@ -1756,6 +1756,21 @@ jobs:
               # Thin GT: the certified GT wheel in the agent interpreter; engine source on PYTHONPATH.
               GT_THIN_PYTHONPATH=""
               if [ "${GT_THIN:-0}" = "1" ]; then
+                # The GT engine and wheel need Python 3.11+. On an image whose own interpreter is
+                # older (3.10 images ran the agent on system python), provision 3.11 the way this
+                # harness already does for images below 3.10: uv tool install of mini-swe-agent 2.4.5.
+                if ! "$GT_PY" -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >/dev/null 2>&1; then
+                  command -v uv >/dev/null 2>&1 || { curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh >/dev/null 2>&1; }
+                  export PATH="$HOME/.local/bin:/root/.local/bin:$PATH"
+                  uv tool install --force --python 3.11 --with fastapi --with orjson mini-swe-agent==2.4.5 >/dev/null 2>&1 || true
+                  _THIN_PY="$(uv tool dir 2>/dev/null)/mini-swe-agent/bin/python"
+                  if [ -x "$_THIN_PY" ] && "$_THIN_PY" -c "import minisweagent" >/dev/null 2>&1; then
+                    GT_PY="$_THIN_PY"
+                    echo "[GT] thin: agent interpreter raised to 3.11 for the GT engine: $GT_PY"
+                  else
+                    echo "[GT] WARN thin: no 3.11 interpreter; GT engine unavailable"
+                  fi
+                fi
                 "$GT_PY" -m pip install --quiet /opt/gt/thin/groundtruth_mcp-*.whl "numpy<2.5" >/dev/null 2>&1 \
                   || uv pip install --python "$GT_PY" /opt/gt/thin/groundtruth_mcp-*.whl "numpy<2.5" >/dev/null 2>&1 || true
                 "$GT_PY" -c "import groundtruth" >/dev/null 2>&1 && echo "[GT] thin wheel OK in GT_PY" || echo "[GT] WARN thin wheel MISSING in GT_PY"
