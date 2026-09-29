@@ -80,6 +80,15 @@ on:
         required: false
         type: boolean
         default: false
+      thin:
+        description: "Thin GT: THIS baseline arm (requires baseline=true) plus GT observations appended to the agent's own actions (gt-harness gt_engine.thin_agent, GitNexus shape). Nothing else of the GT-on arm runs."
+        required: false
+        type: boolean
+        default: false
+      thin_ref:
+        description: "gt-harness ref providing gt_engine for thin=true"
+        required: false
+        default: "integ/gt-attached"
       gt_ref:
         description: "Git ref (branch/tag/SHA) to CHECK OUT for the GT code seam. The SYNCED seam — gt_mini_patch.py + src/groundtruth/{runtime,delivery,pretask} + gt_ae_block.sh — is staged from THIS ref at runtime (SPEED-OPT E), so pointing it at an RL-adherence commit evaluates that code WITHOUT a substrate rebake. NOTE: the step-0 brief is BAKED into the substrate (brief.txt), so brief-CONTENT changes still need a rebake; only the seam follows this ref. Default gt-trial (prior behaviour)."
         required: false
@@ -653,6 +662,21 @@ jobs:
           ref: ${{ needs.prepare.outputs.gt_sha }}
           lfs: false
 
+      - name: Thin GT requires the baseline arm
+        if: ${{ inputs.thin == true && inputs.baseline != true }}
+        run: |
+          echo "::error::thin=true runs ON the baseline arm; dispatch with baseline=true"
+          exit 1
+
+      - name: Checkout the thin GT engine
+        if: ${{ inputs.thin == true }}
+        uses: actions/checkout@v4
+        with:
+          repository: hbali-stack/gt-harness
+          ref: ${{ inputs.thin_ref }}
+          path: gt-thin-src
+          lfs: false
+
       - name: Resolve checked-out GT commit
         shell: bash
         env:
@@ -1132,6 +1156,7 @@ jobs:
           INPUT_MODEL: ${{ inputs.model }}
           INPUT_BASELINE: ${{ inputs.baseline }}
           GT_BASELINE_FLAG: ${{ inputs.baseline == true && '1' || '0' }}
+          GT_THIN_FLAG: ${{ inputs.thin == true && '1' || '0' }}
           DEEPSEEK_API_KEY: ${{ inputs.api_key || secrets.DEEPSEEK_API_KEY }}
           OPENROUTER_API_KEY: ${{ inputs.api_key || secrets.OPENROUTER_API_KEY }}
           REPO_OWNER: ${{ github.repository_owner }}
@@ -1239,6 +1264,14 @@ jobs:
           # `mini-swe-agent` CLI is the INTERACTIVE mini app and never reaches agent.run() in a
           # headless container (0 steps). This runner builds model+local-env+DefaultAgent and runs.
           cp artifact_deepswe/gt_headless_runner.py "${HOST_GT_INJECT}/"
+          if [ "${GT_THIN_FLAG:-0}" = "1" ]; then
+            mkdir -p "${HOST_GT_INJECT}/thin/src"
+            cp -r gt-thin-src/gt_engine gt-thin-src/gt_harness "${HOST_GT_INJECT}/thin/src/"
+            cp gt-thin-src/vendor/groundtruth_mcp-*.whl "${HOST_GT_INJECT}/thin/"
+            cp gt-thin-src/vendor/gt-index-linux-amd64 "${HOST_GT_INJECT}/thin/gt-index"
+            chmod 755 "${HOST_GT_INJECT}/thin/gt-index"
+            echo "[GT] thin engine staged from gt-harness $(git -C gt-thin-src rev-parse HEAD)"
+          fi
           cp artifact_deepswe/ledger_attestation.py "${HOST_GT_INJECT}/"
           cp artifact_deepswe/gt_hook.py        "${HOST_GT_INJECT}/" 2>/dev/null || true
           cp artifact_deepswe/gt_oracle.py      "${HOST_GT_INJECT}/" 2>/dev/null || true
@@ -1349,6 +1382,10 @@ jobs:
             exit 1
           fi
           GT_AGENT_WALL_TIMEOUT_EFFECTIVE_S="$GT_AGENT_WALL_TIMEOUT_S"
+          # Thin GT builds the task graph inside this window before the agent starts.
+          if [ "${GT_THIN_FLAG:-0}" = "1" ]; then
+            GT_AGENT_WALL_TIMEOUT_EFFECTIVE_S=$((GT_AGENT_WALL_TIMEOUT_EFFECTIVE_S + 900))
+          fi
           if [ "$GT_AGENT_WALL_TIMEOUT_EFFECTIVE_S" -gt "$_GT_LATEST_AGENT_EXIT_S" ]; then
             GT_AGENT_WALL_TIMEOUT_EFFECTIVE_S="$_GT_LATEST_AGENT_EXIT_S"
           fi
@@ -1620,6 +1657,7 @@ jobs:
             -e GT_HOOK_FIRE_COUNTS="/gt_out/gt_hook_fire_counts.json" \
             -e GT_XSESSION_DIR="/opt/gt_xsession" \
             -e GT_BASELINE=$GT_BASELINE_FLAG \
+            -e GT_THIN=$GT_THIN_FLAG \
             $MODEL_ENV \
             --entrypoint "" \
             "$TASK_IMAGE_IMMUTABLE" \
@@ -1714,6 +1752,17 @@ jobs:
                   && echo "[GT] litellm dep OK in GT_PY: $_dep" \
                   || echo "[GT] WARN litellm dep MISSING in GT_PY: $_dep"
               done
+
+              # Thin GT: the certified GT wheel in the agent interpreter; engine source on PYTHONPATH.
+              GT_THIN_PYTHONPATH=""
+              if [ "${GT_THIN:-0}" = "1" ]; then
+                "$GT_PY" -m pip install --quiet /opt/gt/thin/groundtruth_mcp-*.whl "numpy<2.5" >/dev/null 2>&1 \
+                  || uv pip install --python "$GT_PY" /opt/gt/thin/groundtruth_mcp-*.whl "numpy<2.5" >/dev/null 2>&1 || true
+                "$GT_PY" -c "import groundtruth" >/dev/null 2>&1 && echo "[GT] thin wheel OK in GT_PY" || echo "[GT] WARN thin wheel MISSING in GT_PY"
+                export GT_INDEX_BINARY=/opt/gt/thin/gt-index
+                export GT_THIN_STATE_DIR=/tmp/gt-thin-state
+                GT_THIN_PYTHONPATH=":/opt/gt/thin/src"
+              fi
 
               # Write mini-swe-agent config AND set env vars to skip interactive wizard
               mkdir -p /root/.config/mini-swe-agent
@@ -1818,7 +1867,7 @@ jobs:
               # above), PYTHONPATH=/opt/gt so the runner imports both minisweagent AND gt_mini_patch
               # (in-process delivery), PYTHONUNBUFFERED so the runner breadcrumbs survive a hang/kill.
               GT_RUNNER_RC=0
-              PYTHONUNBUFFERED=1 PYTHONPATH=/opt/gt "$GT_PY" /opt/gt/gt_headless_runner.py 2>&1 || GT_RUNNER_RC=$?
+              PYTHONUNBUFFERED=1 PYTHONPATH="/opt/gt${GT_THIN_PYTHONPATH}" "$GT_PY" /opt/gt/gt_headless_runner.py 2>&1 || GT_RUNNER_RC=$?
 
               # CRITICAL: capture the patch to the bind-mount BEFORE the container exits.
               # ROOT-CAUSE FIX (2026-07-08): the agent submission (`cat /tmp/patch.txt`) is captured

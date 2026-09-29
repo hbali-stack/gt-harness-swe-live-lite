@@ -151,6 +151,35 @@ def _write_batch_activation_receipt(
         return False
 
 
+def _thin_agent(model, env_obj, agent_cfg: dict, task: str, model_name: str, e: Mapping[str, str]):
+    """The DefaultAgent this control arm builds, as gt_engine.thin_agent.GTAttachedAgent: the
+    same config plus GT's prompt sections, with the task's graph built before the loop."""
+    import hashlib
+
+    from gt_engine.attached_delivery import attached_instance_template, attached_system_section
+    from gt_engine.thin_agent import GTAttachedAgent, build_attached_session
+
+    root_file = e.get("GT_ROOT_FILE") or "/tmp/gt_root.txt"
+    try:
+        cwd = open(root_file, encoding="utf-8").read().strip() or os.getcwd()
+    except OSError:
+        cwd = os.getcwd()
+    state = e.get("GT_THIN_STATE_DIR") or "/gt_out/gt-state"
+    task_id = hashlib.sha256(task.encode("utf-8")).hexdigest()[:16]
+    started = time.time()
+    adapter, _session, delivery, layout = build_attached_session(
+        task=task, cwd=cwd, state_dir=state, task_id=task_id,
+        model=model_name, resolved_model=model_name,
+    )
+    delivery.start(layout.task_root / "bin", env_obj.config.env)
+    _bc(f"thin GT ready in {time.time() - started:.1f}s root={cwd} "
+        f"graph={getattr(adapter.engine_state, 'graph_path', '') or 'none'}")
+    config = {key: value for key, value in agent_cfg.items() if key != "agent_class"}
+    config["system_template"] = f"{config.get('system_template', '')}\n\n{attached_system_section()}"
+    config["instance_template"] = attached_instance_template(config.get("instance_template", ""))
+    return GTAttachedAgent(model, env_obj, delivery=delivery, adapter=adapter, **config), delivery
+
+
 def run(env: dict | None = None) -> int:
     """Build model + local env + DefaultAgent from the env contract and run one task.
 
@@ -227,6 +256,12 @@ def run(env: dict | None = None) -> int:
     # default_type="default" -> the non-interactive DefaultAgent (a pure while-True step loop). This
     # is the single line that fixes the 0-step wash: NEVER "interactive" here.
     agent = get_agent(model, env_obj, agent_cfg, default_type="default")
+    thin_delivery = None
+    if e.get("GT_THIN") == "1":
+        # Thin GT (gt_engine.thin_agent, GitNexus shape): THIS control arm - same config, model,
+        # environment and DefaultAgent - plus GT observations appended to the agent's own actions.
+        # GT_BASELINE stays 1, so nothing else of the GT-on arm (profile, gt_mini_patch) runs.
+        agent, thin_delivery = _thin_agent(model, env_obj, agent_cfg, task, model_name, e)
     batch_required = _batch_hook_required(e)
     batch_result = "patch_import_unavailable"
     batch_attached = False
@@ -268,7 +303,11 @@ def run(env: dict | None = None) -> int:
         return 2
     _bc("agent built — entering agent.run()")
 
-    result = agent.run(task)
+    try:
+        result = agent.run(task)
+    finally:
+        if thin_delivery is not None:
+            thin_delivery.stop()
     steps = getattr(agent, "n_calls", "?")
     cost = getattr(agent, "cost", "?")
     exit_status = result.get("exit_status") if isinstance(result, dict) else "?"
